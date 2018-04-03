@@ -1,137 +1,89 @@
 module Main where
 
---import Lib
-import Text.Pandoc.Definition
 import Text.Pandoc.Walk
-
-import Text.Pandoc.Builder
-
 import Text.Pandoc
-import qualified Data.Text.IO as TIO
-import qualified Data.Text as T
---import Data.Char (toUpper)
+import qualified Data.Text.IO as TextIO
+import qualified Data.Text as Text
+import Control.Monad.State
 
--- Global
+-- Global Functions
 
-isCodeBlock :: Block -> Bool
-isCodeBlock (CodeBlock _ _) = True
-isCodeBlock _               = False
+newId :: State Int Int
+newId = state $ \s -> (s+1, s+1)
+
+numberLine :: String -> State Int String
+numberLine s = do
+    i <- newId
+    pure $ show i ++ "   " ++ s
+
+appenNumbers s = mapM numberLine (lines s) 
 
 -- A
 
 addLineNumbersPerCodeBlock :: Pandoc -> Pandoc
-addLineNumbersPerCodeBlock = walk callLineNumberAddingPerBlock
+addLineNumbersPerCodeBlock = walk lineNumberAddingPerBlock
 
-callLineNumberAddingPerBlock :: Block -> Block
-callLineNumberAddingPerBlock x
-    | isCodeBlock x = addLineNumberForCodeBlocks x
-    | otherwise = x
+lineNumberAddingPerBlock :: Block -> Block
+lineNumberAddingPerBlock (CodeBlock attr code) = 
+    CodeBlock attr ( unlines $ fst $ (runState (appenNumbers code) 0) )
+lineNumberAddingPerBlock block = block
 
-addLineNumberForCodeBlocks :: Block -> Block
-addLineNumberForCodeBlocks (CodeBlock attr code) = CodeBlock attr (addLineNumberToLines 1 code)
-addLineNumberForCodeBlocks x = x
+-- B, C, D
 
-addLineNumberToLines :: Int -> String -> String
-addLineNumberToLines n s = unlines (appendLineNumber n (lines s))
+appendLineNumbersAndGetNumberOfLines :: Pandoc -> (Pandoc, Int)
+appendLineNumbersAndGetNumberOfLines p = 
+    runState (walkM addLineNumbersForBlockAndCountLines p) 0
 
-appendLineNumber :: Int -> [String] -> [String]
-appendLineNumber _ [] = []
-appendLineNumber n (x:xs) = ((show n) ++ "   " ++ x) : (appendLineNumber (n + 1) xs)
+appendLineNumbersAndGetNumberOfCodeBlocks :: Pandoc -> (Pandoc, Int)
+appendLineNumbersAndGetNumberOfCodeBlocks p = 
+    runState (walkM addLineNumbersForBlockAndCountBlocks p) 0
 
--- B and C
+addLineNumbersForBlockAndCountLines :: Block -> State Int Block
+addLineNumbersForBlockAndCountLines (CodeBlock attr code) = do
+    numberOfLines <- get
+    let codeWithLineNumber = unlines $ (evalState (appenNumbers code) numberOfLines)
+    put (numberOfLines + length(lines code))
+    return $ CodeBlock attr codeWithLineNumber
+addLineNumbersForBlockAndCountLines block = return block
 
-addLineNumbersForBlocks :: [Block] -> (Int, Int, [Block])
-addLineNumbersForBlocks blocks = (lineNumber, codeBlockNumber, resultWithNumbers)
-    where
-        result = iterateBlocks ((1, 0), (blocks, []))
-        numPair = fst result
-        resultPair = snd  result
-        lineNumber = fst numPair
-        codeBlockNumber = snd numPair
-        resultWithNumbers = snd resultPair
+addLineNumbersForBlockAndCountBlocks :: Block -> State Int Block
+addLineNumbersForBlockAndCountBlocks (CodeBlock attr code) = do
+    (blocks) <- get
+    let codeWithLineNumber = unlines $ (evalState (appenNumbers code) blocks)
+    put (blocks + 1)
+    return $ CodeBlock attr codeWithLineNumber
+addLineNumbersForBlockAndCountBlocks block = return block
 
-iterateBlocks :: ((Int, Int), ([Block], [Block])) -> ((Int, Int), ([Block], [Block])) -- use two block as input and output |in recursion call the function itself
-iterateBlocks (nm, ([], result)) = (nm, ([], result))
-iterateBlocks ( (n, m), ((x:xs) , result) ) = iterateBlocks ( (n', m'), (xs, (x' ++ result)) ) -- TODO
---(m , mc, x' : (thdBlockArray ( iterateBlocks (m, mc, xs) )))
-    where
-        n' = fstBlock (addLineNumbersToBlock (n, m, x))
-        m' = sndBlock (addLineNumbersToBlock (n, m, x))
-        x' = thdBlock (addLineNumbersToBlock (n, m, x))
+-- E, F
+numberOfCharactersAndWords :: Pandoc -> (Int, Int)
+numberOfCharactersAndWords p = execState (walkM countCharactersAndWords p) (0, 0)
 
-addLineNumbersToBlock :: (Int, Int, Block) -> (Int, Int, Block)
-addLineNumbersToBlock (n, nc, CodeBlock attr code) =
-    (m, mc, CodeBlock attr code')
-        where
-            m = fst (addLineNumberToCode (n, code))
-            mc = (nc + 1)
-            code' = snd (addLineNumberToCode (n, code))
-addLineNumbersToBlock (n, nc, block) = (n, nc, block)
-
-addLineNumberToCode :: (Int, String) -> (Int, String)
-addLineNumberToCode (n, code) = 
-    ( fst (codeLinesWithNumber), unlines (snd (codeLinesWithNumber)) )
-    where
-        codeLines = lines code
-        codeLinesWithNumber = appendLineNumberB (n, codeLines)
-
-appendLineNumberB :: (Int, [String]) -> (Int, [String])
-appendLineNumberB (n, s) =  getFirstPartOfTripleTuple ( f (n, [], s) )
-    where
-        addNumberToStr :: Int -> String -> String
-        addNumberToStr n s = (show n) ++ "   " ++ s
-        f :: (Int, [String], [String]) -> (Int, [String], [String])
-        f (n, result, []) = (n, result, [])
-        f (n, result, (x:xs)) = f ( (n + 1), ( result ++ [(addNumberToStr n x)] ), (xs) )
-
-getFirstPartOfTripleTuple :: (Int, [String], [String]) -> (Int, [String])
-getFirstPartOfTripleTuple (n, x, y) = (n, x)
-
-fstBlock :: (Int, Int, Block) -> Int
-fstBlock (f, _, _) = f
-
-sndBlock :: (Int, Int, Block) -> Int
-sndBlock (_, s, _) = s
-
-thdBlock :: (Int, Int, Block) -> Block
-thdBlock (_, _, t) = t
-
-fstBlockArray :: (Int, Int, [Block]) -> Int
-fstBlockArray (f, _, _) = f
-
-sndBlockArray :: (Int, Int, [Block]) -> Int
-sndBlockArray (_, s, _) = s
-
-thdBlockArray :: (Int, Int, [Block]) -> [Block]
-thdBlockArray (_, _, b) = b
-
--- For test
-asList :: [String] -> String
-asList ss = '[' : asList' ss
-  where
-    asList' (a:b:ss) = a ++ (',' : asList' (b:ss))
-    asList' (a:ss)   = a ++ asList' (ss)
-    asList' []       = "]"
-
-writeOutTheResult :: (Int, Int, [Block]) -> Meta -> IO()
-writeOutTheResult (lineNumbers, codeBlocks, blocks) meta = 
-    do
-        putStrLn ("Line numbers: " ++ (show lineNumbers))
-        putStrLn ("Code blocks: " ++ (show codeBlocks))
-        pan <- runIOorExplode $ writeMarkdown (def { writerSetextHeaders = False }) $ Pandoc meta blocks
-        TIO.writeFile "testB.md" pan
+countCharactersAndWords :: Inline -> State (Int, Int) Inline
+countCharactersAndWords (Str l) = do
+    (numberOfCharacters, numberOfWords) <- get
+    put (numberOfCharacters + (length l), numberOfWords + 1)
+    return (Str l)
+countCharactersAndWords l = return l
 
 main :: IO ()
 main = do 
-    putStrLn "Start"
-    inputFile <- TIO.readFile "test.md"
-    p <- runIOorExplode $ readMarkdown def inputFile
-    s' <- runIOorExplode $ writeMarkdown (def { writerSetextHeaders = False }) $ addLineNumbersPerCodeBlock p
-    TIO.writeFile "testA.md" s'
-
-    Pandoc metaInf blocks <- runIOorExplode $ readMarkdown def inputFile
-    -- b' <- runIOorExplode $ writeMarkdown (def { writerSetextHeaders = False }) $ Pandoc metaInf (thdBlockArray (addLineNumbersForBlocks blocks))
-    writeOutTheResult (addLineNumbersForBlocks blocks) metaInf
-    -- TIO.writeFile "testB.md" b'
-    putStrLn "End"
+    -- Read text from file
+    putStrLn "Type the name of the input file next to the executable: "
+    fileName <- getLine
+    inputText <- TextIO.readFile fileName
+    p <- runIOorExplode $ readMarkdown (def {readerExtensions = pandocExtensions}) inputText
+    -- A
+    outputTextA <- runIOorExplode $ writeMarkdown (def { writerExtensions = pandocExtensions }) $ addLineNumbersPerCodeBlock p
+    TextIO.writeFile "LineNumberingOutputA.md" outputTextA
+    -- B, C, D
+    let (pWithLineNumbers, lines) = appendLineNumbersAndGetNumberOfLines p
+    let (notUsed, blocks) = appendLineNumbersAndGetNumberOfCodeBlocks p
+    outputTextB <- runIOorExplode $ writeMarkdown (def {writerExtensions = pandocExtensions}) pWithLineNumbers
+    TextIO.writeFile "LineNumberingOutputB.md" outputTextB
+    putStrLn ("Line numbers: " ++ (show lines))
+    putStrLn ("Code blocks: " ++ (show blocks))
+    -- E, F
+    let (characters, words) = numberOfCharactersAndWords p
+    putStrLn ("Number of characters: " ++ (show characters))
+    putStrLn ("Number of words: " ++ (show words))
 

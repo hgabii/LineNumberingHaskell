@@ -1,5 +1,11 @@
 # LineNumbering
 
+<div>
+    How to build:
+    <li>ghc -o main Main.hs</li>
+    <li>stack build --fast (This will download the required packages)</li>
+</div>
+
 <div class="row"><div class="col-md-12"><h2>Leírás</h2><div style="margin-left:0px; background: lightgray"><ol style="list-style-type: upper-alpha">
 <li><p>Készíts egy programot, ami egy Pandoc markdown formátumú dokumentumban beszámozza a kód blokkok sorait.</p>
 <p>Például, ha a bemenet</p>
