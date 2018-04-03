@@ -41,7 +41,14 @@ appendLineNumber n (x:xs) = ((show n) ++ "   " ++ x) : (appendLineNumber (n + 1)
 -- B and C
 
 addLineNumbersForBlocks :: [Block] -> (Int, Int, [Block])
-addLineNumbersForBlocks blocks = iterateBlocks (1, 0, blocks)
+addLineNumbersForBlocks blocks = (lineNumber, codeBlockNumber, resultWithNumbers)
+    where
+        result = iterateBlocks ((1, 0), (blocks, []))
+        numPair = fst result
+        resultPair = snd  result
+        lineNumber = fst numPair
+        codeBlockNumber = snd numPair
+        resultWithNumbers = snd resultPair
 
 iterateBlocks :: ((Int, Int), ([Block], [Block])) -> ((Int, Int), ([Block], [Block])) -- use two block as input and output |in recursion call the function itself
 iterateBlocks (nm, ([], result)) = (nm, ([], result))
