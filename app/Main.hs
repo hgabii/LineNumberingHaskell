@@ -38,30 +38,57 @@ appendLineNumber :: Int -> [String] -> [String]
 appendLineNumber _ [] = []
 appendLineNumber n (x:xs) = ((show n) ++ "   " ++ x) : (appendLineNumber (n + 1) xs)
 
--- B
+-- B and C
 
 addLineNumbersForBlocks :: [Block] -> [Block]
-addLineNumbersForBlocks blocks = snd (callLineNumberAdding (1, blocks))
+addLineNumbersForBlocks blocks = snd (iterateBlocks (1, blocks))
 
-callLineNumberAdding :: (Int, [Block]) -> (Int, [Block])
-callLineNumberAdding (n, []) = (n, []) 
-callLineNumberAdding (n, (x:xs)) = 
-    ( fst (addLineNumberGlobal (n, x)), 
-      (snd (addLineNumberGlobal (n, x))) : (snd ( callLineNumberAdding (fst (addLineNumberGlobal (n, x)) ), xs ) ) )
-    -- TODO: optimize
+iterateBlocks :: (Int, [Block]) -> (Int, [Block])
+iterateBlocks (n, []) = (n, [])
+iterateBlocks (n, (x:xs)) = (m , x' : (snd ( iterateBlocks (m, xs) )))
+    where
+        m = fst (addLineNumbersToBlock (n, x))
+        x' = snd (addLineNumbersToBlock (n, x))
 
-addLineNumberGlobal :: (Int, Block) -> (Int, Block)
-addLineNumberGlobal (n, block)
-    | (isCodeBlock block) = ( fst (addLineNumberToLinesB (n, block)), snd(addLineNumberToLinesB (n, block)))
-    | otherwise = (n, block)
+addLineNumbersToBlock :: (Int, Block) -> (Int, Block)
+addLineNumbersToBlock (n, CodeBlock attr code) =
+    (m, CodeBlock attr code')
+        where
+            m = fst (addLineNumberToCode (n, code))
+            code' = snd (addLineNumberToCode (n, code))
+addLineNumbersToBlock (n, block) = (n, block)
 
-addLineNumberToLinesB :: 
+addLineNumberToCode :: (Int, String) -> (Int, String)
+addLineNumberToCode (n, code) = 
+    ( fst (codeLinesWithNumber), unlines (snd (codeLinesWithNumber)) )
+    where
+        codeLines = lines code
+        codeLinesWithNumber = appendLineNumberB (n, codeLines)
 
-addLineNumberB :: (Int, [Sting]) -> (Int, [String])
-addLineNumberB (n, []) = (n, [])
-addLineNumberB (n, (x:xs)) = (n + 1, ((show n) ++ "   " ++ x) : addLineNumberB (n + 1, xs))
--- addLineNumberToCodeBlock :: (Int, Block) -> (Int, Block)
--- addLineNumberToCodeBlock (n, CodeBlock attr code) 
+appendLineNumberB :: (Int, [String]) -> (Int, [String])
+appendLineNumberB (n, s) =  getFirstPartOfTripleTuple ( f (n, [], s) )
+    where
+        addNumberToStr :: Int -> String -> String
+        addNumberToStr n s = (show n) ++ "   " ++ s
+        f :: (Int, [String], [String]) -> (Int, [String], [String])
+        f (n, result, []) = (n, result, [])
+        f (n, result, (x:xs)) = f ( (n + 1), ( result ++ [(addNumberToStr n x)] ), (xs) )
+
+getFirstPartOfTripleTuple :: (Int, [String], [String]) -> (Int, [String])
+getFirstPartOfTripleTuple (n, x, y) = (n, x)
+-- appendLineNumberB (n, []) = (n, [])
+-- appendLineNumberB (n, (x:xs)) = 
+--     (n + 1, (addNumberToStr n x) : ( snd ( appendLineNumberB ( (n + 1), xs ) ) ) )
+--     where
+--         addNumberToStr :: Int -> String -> String
+--         addNumberToStr n s = (show n) ++ "   " ++ s
+
+asList :: [String] -> String
+asList ss = '[' : asList' ss
+  where
+    asList' (a:b:ss) = a ++ (',' : asList' (b:ss))
+    asList' (a:ss)   = a ++ asList' (ss)
+    asList' []       = "]"
 
 main :: IO ()
 main = do 
@@ -71,7 +98,9 @@ main = do
     s' <- runIOorExplode $ writeMarkdown (def { writerSetextHeaders = False }) $ addLineNumbersPerCodeBlock p
     TIO.writeFile "testA.md" s'
 
-    Pandoc _ blocks <- runIOorExplode $ readMarkdown def inputFile
-
+    Pandoc metaInf blocks <- runIOorExplode $ readMarkdown def inputFile
+    b' <- runIOorExplode $ writeMarkdown (def { writerSetextHeaders = False }) $ Pandoc metaInf (addLineNumbersForBlocks blocks)
+    
+    TIO.writeFile "testB.md" b'
     putStrLn "End"
 
