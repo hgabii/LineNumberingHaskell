@@ -43,7 +43,7 @@ appendLineNumber n (x:xs) = ((show n) ++ "   " ++ x) : (appendLineNumber (n + 1)
 addLineNumbersForBlocks :: [Block] -> (Int, Int, [Block])
 addLineNumbersForBlocks blocks = iterateBlocks (1, 0, blocks)
 
-iterateBlocks :: (Int, Int, [Block]) -> (Int, Int, [Block])
+iterateBlocks :: (Int, Int, [Block]) -> (Int, Int, [Block])  -- use two block as input and output |in recursion call the function itself
 iterateBlocks (n, nc, []) = (n, nc, [])
 iterateBlocks (n, nc, (x:xs)) = (m , mc, x' : (thdBlockArray ( iterateBlocks (m, mc, xs) )))
     where
